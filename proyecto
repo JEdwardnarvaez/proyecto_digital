@@ -1,0 +1,177 @@
+
+#include <LiquidCrystal.h> // Libreria lcd
+LiquidCrystal lcd(A0,A1,A2,A3,A4,A5);
+#include <Servo.h> // Librería servo motor
+#include <Keypad.h> // Librería de teclado
+
+bool clave_errada; // Al registrar 3 errores el sistema se bloquea
+uint8_t num_errores; // Registra errores ingresados
+const byte NUM_FILAS  = 4; // Establece número de filas para realizar mapeo de teclado
+const byte NUM_COLUMNAS = 4; // Establece número de columnas para realizar mapeo de teclado
+const byte led[]={4,3,2}; // Números asignados a leds
+
+char mapaTeclas[NUM_FILAS][NUM_COLUMNAS]={{'1','2','3','A'},
+                                          {'4','5','6','B'},
+                                          {'7','8','9','C'},
+                                          {'*','0','#','D'}};
+String clave="A159"; // Registre una clave con tantos caracteres como desee
+String digitada;  // clave registrada por el usuario
+uint8_t estado=0; // Establece estado inicial del sistema [0]
+byte pines_fila[NUM_FILAS]={12,11,10,9};
+byte pines_columna[NUM_COLUMNAS]={8,7,6,5};
+
+Keypad teclado = Keypad(makeKeymap(mapaTeclas),pines_fila,pines_columna,NUM_FILAS,NUM_COLUMNAS);
+Servo servo; //configura el teclado con las filas y columnas
+
+bool verificaclave(String sa, String sd); //la función booleana recibe y compara dos cadenas, la digitada y la real
+void mostrar(uint8_t); // Muestra los errores registrados
+void efecto(); // El servo-motor se desbloquea
+
+
+
+void setup() //configuraciones de esquema inicial
+{
+  lcd.begin(16,2);///////////
+  delay (100);          ///// Establece los parámetros de inicio
+  lcd.setCursor(0,0);//////// Establece la posición de mensaje de bienvenida 1
+  lcd.print("Cerradura digital"); // Mensaje de bienvenida 1
+  lcd.setCursor(0,1); // Establece la posición de mensaje de bienvenida 2
+  lcd.print("BIENVENIDO: "); // Mensaje de bienvenida 2
+
+  for(uint8_t i=0; i<3; i++) //Enciende led en orden
+    pinMode(led[i],OUTPUT);  //leds: rojo, verde, amarillo
+
+  efecto(); // Función efecto (servo-motor) librería <servo.h>
+
+  servo.attach(13);
+  servo.write(0);
+  delay(1000);
+
+  lcd.clear(); // Limpia pantalla del lcd
+  lcd.setCursor(0,0); // Ubica en posición de origen la pantalla
+  lcd.print("Digite la clave:  "); //Muestra mensaje en posición de origen del lcd
+
+  clave_errada = false; // Establece en estado de inicio nulidad en clave errada
+  num_errores = 0;  // Establece en estado de inicio número de errores en 0
+}
+
+
+void loop() //configuraciones de esquema en funcionamiento
+{
+  char tecla = teclado.getKey(); // obtiene tecla digitada y la almacena
+
+  if(tecla != NO_KEY) // Mientras no se haya digitado tecla diferente de '#'
+  {
+   	estado = 1; // En estas condiciones, establecer a estado en 1
+
+    if(tecla == '#') // si la tecla recibida con la función .getKey() es '#' entonces:
+    {
+      	if(verificaclave(clave,digitada)) // llama a la función verificaclave() con los argumentos clave y digitada
+      	{
+        	estado = 3; // Establece estado 3 donde se verifica la clave ingresada y la establecida
+        	mostrar(estado); // Muestra estado actual segun return de verificar
+        	delay(3000); // tiempo de espera
+        	estado = 0; // Se restablece a estado [0] o inicial
+      	}
+      	else // Si la tecla recibida es diferente a '#'
+      	{
+        	estado = 2; // Se establece en estado 2 o esperando nuevos caracteres
+        	mostrar(estado); // Muestra estado actual segun return de verificar
+        	delay(3000); // tiempo de espera
+        	estado = 0; // Se establece a estado [0] o inicial
+      	}
+
+      	digitada = ""; // Pre-establece "digitada" como una clave en blanco o no digitada
+    }
+    else digitada += tecla; // Adherir lo almacenado en la cadena tecla y ponerlo en la cadena 'digitada'
+    mostrar(estado); // Retornar estado actual (1. inicial,2. lectura,3. ingreso)
+  }
+}
+
+
+
+bool verificaclave(String sa, String sd) // clave actual, clave digitada
+{
+  bool resultado = false;   // Pre-establece el valor inicial de resultado con el booleano 'falso'
+  if(sa.compareTo(sd)==0)   // Si la clave digitada es igual a la clave real
+    resultado = true; // Si el resultado de comparar ambas cadenas es [0] entonces la contraseña es correcta
+  else // si la contraseña ingresada es diferente a la real, entonces:
+    resultado = false; // Establece el resultado a falso debido a que no coinciden (no confundir con estado inicial)
+  return resultado; // retorna o da como resultado el valor de la variable 'resultado'
+}
+
+
+
+void mostrar(uint8_t e=0)  // función mostrar donde tiene como argumento e (estado) y le proporciona el valor 0
+{
+  if(e==0)                 // Aguardando digitar en estado [0] o inicial
+  {
+    lcd.setCursor(0,0);   // Establece la posición origen en la pantalla lcd
+    lcd.print("Digite la clave  "); // Muestra el mensaje en pantalla
+    digitalWrite(led[0],0);  ////////
+    digitalWrite(led[1],0);  //////// Muestra el mensaje en pantalla en diferentes secciones de pantalla tras digitar
+    digitalWrite(led[2],0);  ////////
+    servo.write(0);         // No se mueve el servo-motor porque está en estado inicial o recibiendo valores en 'teclas'
+  }
+
+  else if(e==1)             // Estado [1] (e = 1) donde el usuario está digitando o agregando caracteres
+  {
+    lcd.setCursor(0,0);    // Establece posición origen de pantalla
+    lcd.print("Digitando...    "); // Muestra mensaje en pantalla
+    digitalWrite(led[0],0); ////////
+    digitalWrite(led[1],0); //////// Muestra el mensaje en pantalla en diferentes secciones de pantalla tras digitar
+    digitalWrite(led[2],1); ////////
+  }
+
+  else if(e==2)              // Estado [2] donde la clave es incorrecta.
+  {
+    lcd.setCursor(0,0);      // Establece posición origen de pantalla
+    lcd.print("clave incorrecta "); // Mensaje en pantalla del estado [2]
+    digitalWrite(led[0],1); ////////
+    digitalWrite(led[1],0); //////// Muestra el mensaje en pantalla en diferentes secciones de pantalla tras digitar
+    digitalWrite(led[2],0); ////////
+
+    num_errores++; // aumenta el contador de errores en 1 unidad
+    if(num_errores >= 3) clave_errada = true; // si la cantidad de errores es igual a 3 establece la variable booleana clave_errada en 'verdader'
+    while(clave_errada )     // Al registrar 3 errores el sistema se bloquea y entrada en modo 'bloqueo permanente'
+    {
+      lcd.clear(); // limpia la pantalla lcd
+      lcd.setCursor(0,0); // establece la posición de pantalla en el origen
+      lcd.print("3 errores registrados "); // Muestra mensaje en pantalla
+      lcd.setCursor(0,1); // salto de linea en pantalla lcd
+      lcd.print("sistema bloqueado   "); // Muestra mensaje en pantalla lcd
+      efecto(); // efecto de leds
+    }
+  }
+
+  else if(e==3)              // Estado [3] (estado = 3) o clave correta.
+  {
+    lcd.setCursor(0,0);     // Establece posición de origen de pantalla lcd
+    lcd.print("clave correcta   "); // Muestra mensaje en pantalla en posición de origen
+    digitalWrite(led[0],0); ////////
+    digitalWrite(led[1],1); //////// Muestra el mensaje en pantalla en diferentes secciones de pantalla tras digitar
+    digitalWrite(led[2],0);////////
+    delay(1000); // Tiempo de espera tras digitar la contraseña correctamente
+    efecto(); // Efecto de luces led
+    lcd.setCursor(0,0); // Establece posición de origen en la pantalla lcd
+    lcd.print("Abriendo...      "); // Muestra mensaje en pantalla
+    delay(1000); // Tiempo de espera mientras se desbloquea el servomotor
+    servo.write(90);        // se mueve el servomotor para liberar el bloqueo a un ángulo de 90 grados
+  }
+}
+
+
+
+void efecto() // efecto de luces con leds según estado
+{
+  for(int j=0; j<4; j++)
+  {
+   for(int i=0; i<3; i++)
+   {
+     digitalWrite(led[i],(!digitalRead(led[i])));
+     delay(30);
+   	 digitalWrite(led[i],(!digitalRead(led[i])));
+   	 delay(30);
+   }
+  }
+}
